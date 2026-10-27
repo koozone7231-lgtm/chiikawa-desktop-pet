@@ -1,0 +1,214 @@
+html, body {
+  margin: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  user-select: none;
+  font-family: "Malgun Gothic", "Apple SD Gothic Neo", sans-serif;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+}
+
+.hidden { display: none !important; }
+
+/* ---------- 펫 ---------- */
+.pet {
+  position: absolute;
+  left: 0;
+  top: 0;
+  will-change: transform;
+}
+
+.body {
+  transform-origin: 50% 100%;
+  cursor: grab;
+}
+
+.body img {
+  display: block;
+  pointer-events: auto;
+  filter: drop-shadow(0 2px 2px rgba(0, 0, 0, 0.18));
+}
+
+.s-idle    { animation: breathe 2.4s ease-in-out infinite; }
+.s-walk    { animation: hop 0.5s ease-in-out infinite; }
+.s-dash    { animation: hop 0.18s ease-in-out infinite; }
+.s-chase   { animation: hop 0.22s ease-in-out infinite; }
+.s-sit     { transform: scaleY(0.9) scaleX(1.05); }
+.s-hungry  { transform: scaleY(0.9) scaleX(1.05); animation: rub 1.2s ease-in-out infinite; }
+.s-sad     { transform: scaleY(0.93); filter: saturate(0.5) brightness(0.92); }
+.s-sleep   { transform: scaleY(0.86) scaleX(1.08) rotate(-4deg); filter: brightness(0.9); animation: snore 3s ease-in-out infinite; }
+.s-peek    { cursor: pointer; }
+.s-land    { animation: squash 0.35s ease-out; }
+.s-held    { animation: dangle 0.8s ease-in-out infinite; cursor: grabbing; }
+.s-cry     { animation: shake 0.12s linear infinite; }
+.s-sing    { animation: sway 0.9s ease-in-out infinite; }
+.s-happy   { animation: wiggle 0.3s ease-in-out infinite; }
+.s-meet    { animation: wiggle 0.45s ease-in-out infinite; }
+.s-eat     { animation: nibble 0.3s ease-in-out infinite; }
+
+@keyframes breathe { 50% { transform: scaleY(0.97) scaleX(1.02); } }
+@keyframes hop     { 50% { transform: translateY(-5px); } }
+@keyframes rub     { 50% { transform: scaleY(0.88) scaleX(1.07); } }
+@keyframes snore   { 50% { transform: scaleY(0.83) scaleX(1.1) rotate(-4deg); } }
+@keyframes squash  { 0% { transform: scaleY(0.75) scaleX(1.2); } 100% { transform: none; } }
+@keyframes dangle  { 0%, 100% { transform: rotate(-8deg); } 50% { transform: rotate(8deg); } }
+@keyframes shake   { 0%, 100% { transform: translateX(-2px); } 50% { transform: translateX(2px); } }
+@keyframes sway    { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
+@keyframes wiggle  { 0%, 100% { transform: rotate(-5deg) translateY(0); } 50% { transform: rotate(5deg) translateY(-4px); } }
+@keyframes nibble  { 50% { transform: scaleY(0.95) translateY(1px); } }
+
+/* 말풍선 */
+.bubble {
+  position: absolute;
+  bottom: calc(100% + 8px);
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 200px;
+  width: max-content;
+  padding: 6px 11px;
+  background: #fff;
+  color: #333;
+  border: 2px solid #3a3a3a;
+  border-radius: 14px;
+  font-size: 13px;
+  line-height: 1.35;
+  text-align: center;
+  white-space: pre-wrap;
+  pointer-events: none;
+  animation: pop 0.18s ease-out;
+}
+.bubble::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 7px solid transparent;
+  border-top-color: #3a3a3a;
+}
+@keyframes pop { from { transform: translateX(-50%) scale(0.6); opacity: 0; } }
+
+/* 아래 끝에 몸이 잠겨 있을 땐 간식을 얼굴 옆에 든다 */
+.peeking .prop { bottom: auto; top: 28%; animation: none; }
+
+/* 손에 든 물건 (간식, 책) */
+.prop {
+  position: absolute;
+  bottom: 18px;
+  right: -6px;
+  font-size: 30px;
+  pointer-events: none;
+  animation: nibble 0.6s ease-in-out infinite;
+}
+
+/* 하트·음표·Z·눈물 */
+.fx {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 70%;
+  height: 0;
+  pointer-events: none;
+}
+.particle {
+  position: absolute;
+  bottom: 0;
+  font-size: 18px;
+  font-weight: bold;
+  color: #ff7aa2;
+  text-shadow: 0 0 2px #fff, 0 0 2px #fff;
+  opacity: 0;
+  animation: floatUp 1s ease-out forwards;
+}
+@keyframes floatUp {
+  0%   { opacity: 0; transform: translateY(0) scale(0.6); }
+  20%  { opacity: 1; }
+  100% { opacity: 0; transform: translateY(-50px) scale(1.1); }
+}
+
+/* ---------- 펫 메뉴 ---------- */
+#menu {
+  position: fixed;
+  width: 236px;
+  padding: 10px 12px 12px;
+  background: #fffaf0;
+  border: 2px solid #3a3a3a;
+  border-radius: 16px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.18);
+  color: #333;
+  font-size: 12px;
+}
+#menu .head { display: flex; align-items: center; gap: 6px; margin-bottom: 8px; }
+#menu .head b { font-size: 14px; }
+#menu .lv { color: #e2668b; flex: 1; }
+#menu .x { border: 0; background: none; cursor: pointer; font-size: 13px; color: #888; padding: 2px 4px; }
+#menu .stat { display: flex; align-items: center; gap: 6px; margin: 4px 0; }
+#menu .stat span { width: 40px; }
+#menu .stat b { width: 22px; text-align: right; font-weight: normal; color: #777; }
+#menu .track { flex: 1; height: 8px; background: #eee3cf; border-radius: 4px; overflow: hidden; }
+#menu .fill { height: 100%; background: #8ccf7e; border-radius: 4px; }
+#menu .fill.mid { background: #f2c14e; }
+#menu .fill.low { background: #ef7d7d; }
+#menu .coins, #menu .pomo { margin: 8px 0 4px; }
+#menu .row { display: flex; gap: 5px; margin-top: 6px; }
+#menu button:not(.x) {
+  flex: 1;
+  padding: 6px 2px;
+  border: 1.5px solid #3a3a3a;
+  border-radius: 10px;
+  background: #fff;
+  font: inherit;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1px;
+}
+#menu button:not(.x):hover { background: #ffe8ef; }
+#menu button:disabled { opacity: 0.4; cursor: default; }
+#menu button small { color: #a07a2c; font-size: 10px; }
+#menu button.off { opacity: 0.45; }
+#menu .label { margin: 10px 0 0; color: #888; font-size: 11px; }
+
+/* 숏컷 / 놀아주기 탭 */
+#menu .tabs { display: flex; gap: 4px; margin-bottom: 8px; }
+#menu .tabs button.tab {
+  flex: 1;
+  flex-direction: row;
+  justify-content: center;
+  padding: 6px 2px;
+  border-radius: 10px 10px 4px 4px;
+  background: #f4ecdc;
+  border-color: #c9bda6;
+  color: #777;
+  font-weight: bold;
+}
+#menu .tabs button.tab.on { background: #ffd6e2; border-color: #3a3a3a; color: #333; }
+
+#menu .sc-list { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
+#menu button.sc { flex-direction: row; justify-content: flex-start; gap: 8px; padding: 7px 10px; text-align: left; }
+#menu button.sc .ic { font-size: 16px; width: 20px; text-align: center; }
+#menu button.sc .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#menu button.sc .pin { color: #e2668b; }
+#menu .empty { color: #999; text-align: center; padding: 14px 0; }
+#menu button.edit { width: 100%; margin-top: 8px; flex-direction: row; justify-content: center; border-style: dashed; color: #777; }
+
+/* 공놀이 공 */
+.ball {
+  position: fixed;
+  bottom: 2px;
+  font-size: 30px;
+  line-height: 1;
+  pointer-events: none;
+  animation: roll 0.7s ease-out;
+}
+@keyframes roll {
+  from { transform: translateX(var(--from)) translateY(-60px) rotate(-540deg); }
+  60%  { transform: translateY(-14px) rotate(-60deg); }
+  to   { transform: none; }
+}

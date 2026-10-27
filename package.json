@@ -1,0 +1,66 @@
+{
+  "name": "chiikawa-desktop-pet",
+  "productName": "먼작귀 펫",
+  "version": "0.1.2",
+  "description": "바탕화면을 돌아다니는 먼작귀 친구들 (개인용)",
+  "author": "강현구",
+  "main": "src/main.js",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "sprites": "python tools/make_sprites.py && python tools/make_icon.py",
+    "dist": "electron-builder --win",
+    "release": "electron-builder --win nsis --publish always"
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8",
+    "rcedit": "4.0.1"
+  },
+  "build": {
+    "appId": "com.koozone.chiikawa-desktop-pet",
+    "productName": "먼작귀 펫",
+    "executableName": "ChiikawaPet",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "assets/sprites/**/*",
+      "package.json"
+    ],
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ],
+      "icon": "build/icon.ico",
+      "signAndEditExecutable": false
+    },
+    "nsis": {
+      "oneClick": false,
+      "perMachine": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "먼작귀 펫",
+      "artifactName": "ChiikawaPet-Setup-${version}.${ext}"
+    },
+    "portable": {
+      "artifactName": "ChiikawaPet-Portable-${version}.${ext}"
+    },
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "koozone7231-lgtm",
+        "repo": "chiikawa-desktop-pet",
+        "releaseType": "release"
+      }
+    ],
+    "afterPack": "build/afterPack.js"
+  },
+  "dependencies": {
+    "electron-updater": "6.3.9"
+  }
+}

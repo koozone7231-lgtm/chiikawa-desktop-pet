@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'">
+  <title>먼작귀 펫 설정</title>
+  <link rel="stylesheet" href="settings.css">
+</head>
+<body>
+  <aside>
+    <div class="brand">
+      <img src="../../assets/sprites/chiikawa.png" alt="">
+      <span>먼작귀 펫</span>
+    </div>
+    <nav id="nav">
+      <button data-tab="pets">🐾 캐릭터</button>
+      <button data-tab="behavior">💬 행동·말풍선</button>
+      <button data-tab="focus">📖 집중·알림</button>
+      <button data-tab="shortcuts">🔗 숏컷</button>
+      <button data-tab="status">📊 상태</button>
+      <button data-tab="general">⚙️ 일반</button>
+    </nav>
+    <div class="saved" id="saved">저장됨 ✓</div>
+  </aside>
+
+  <main>
+    <!-- 캐릭터 -->
+    <section data-tab="pets">
+      <h1>캐릭터</h1>
+      <p class="hint">바탕화면에 나올 친구를 고르고, 크기와 걷는 속도를 정해요. 한 번에 5마리까지 나올 수 있어요.</p>
+      <div class="count" id="petCount"></div>
+      <div class="cards pets" id="petCards"></div>
+
+      <div class="card">
+        <div class="field">
+          <div><b>크기</b><small>펫 키 (픽셀)</small></div>
+          <div class="slider"><input type="range" data-setting="petSize" min="70" max="170" step="2"><output data-for="petSize" data-unit="px"></output></div>
+        </div>
+        <div class="field">
+          <div><b>걷는 속도</b><small>우사기 질주에도 똑같이 적용돼요</small></div>
+          <div class="slider"><input type="range" data-setting="speed" min="0.5" max="2" step="0.1"><output data-for="speed" data-unit="배"></output></div>
+        </div>
+        <div class="field">
+          <div><b>캐릭터 간격</b><small>걸을 때 서로 이만큼 떨어지고, 집중 모드 줄 간격도 돼요. 0이면 겹쳐도 됨</small></div>
+          <div class="slider"><input type="range" data-setting="petGap" min="0" max="200" step="4"><output data-for="petGap" data-unit="px"></output></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 행동 -->
+    <section data-tab="behavior">
+      <h1>행동·말풍선</h1>
+      <p class="hint">펫이 혼잣말을 얼마나 자주 할지 정해요. 클릭·간식 같은 반응은 항상 말해요.</p>
+      <div class="card">
+        <div class="field">
+          <div><b>말풍선 빈도</b></div>
+          <div class="seg" data-setting="chatter">
+            <button value="normal">자주</button>
+            <button value="less">가끔</button>
+            <button value="off">조용히</button>
+          </div>
+        </div>
+        <div class="field">
+          <div><b>친구끼리 놀기</b><small>마주치면 같이 놀고 하트를 날려요</small></div>
+          <label class="switch"><input type="checkbox" data-setting="meetings"><span></span></label>
+        </div>
+      </div>
+    </section>
+
+    <!-- 집중·알림 -->
+    <section data-tab="focus">
+      <h1>집중·알림</h1>
+      <p class="hint">집중 모드에서는 펫들이 화면 아래에서 얼굴만 내밀고 가만히 지켜봐요.</p>
+      <div class="card">
+        <div class="field">
+          <div><b>집중 모드</b><small>지금 바로 켜고 끄기</small></div>
+          <label class="switch"><input type="checkbox" id="focusNow"><span></span></label>
+        </div>
+        <div class="field">
+          <div><b>집중 시간</b><small>뽀모도로 한 번</small></div>
+          <div class="num"><input type="number" data-setting="pomodoroFocusMin" min="5" max="90"><span>분</span></div>
+        </div>
+        <div class="field">
+          <div><b>쉬는 시간</b></div>
+          <div class="num"><input type="number" data-setting="pomodoroRestMin" min="1" max="30"><span>분</span></div>
+        </div>
+        <div class="field">
+          <div><b>얼굴 내미는 정도</b><small>집중 모드에서 화면 위로 보이는 만큼</small></div>
+          <div class="slider"><input type="range" data-setting="peekVisible" min="0.35" max="0.9" step="0.05"><output data-for="peekVisible" data-unit="%"></output></div>
+        </div>
+      </div>
+      <div class="card">
+        <div class="field">
+          <div><b>휴식 알림</b><small>평소에 이 시간마다 "좀 쉬자~" 하고 알려줘요. 0이면 끔</small></div>
+          <div class="num"><input type="number" data-setting="breakEveryMin" min="0" max="180"><span>분</span></div>
+        </div>
+      </div>
+    </section>
+
+    <!-- 숏컷 -->
+    <section data-tab="shortcuts">
+      <h1>숏컷</h1>
+      <p class="hint">펫을 누르면 열리는 메뉴의 숏컷 탭에서 골라 열 수 있어요. 펫을 정해 두면 그 펫 메뉴 맨 위에 ★로 고정돼요.</p>
+
+      <form id="form" class="card">
+        <div class="grid">
+          <label>이름<input name="name" required maxlength="30" placeholder="예: 메일"></label>
+          <label class="small">아이콘<input name="icon" maxlength="4" placeholder="📧"></label>
+        </div>
+        <div class="grid">
+          <label class="small">종류
+            <select name="type">
+              <option value="url">웹페이지</option>
+              <option value="app">앱</option>
+            </select>
+          </label>
+          <label>주소 / 앱 경로
+            <span class="with-btn">
+              <input name="target" required placeholder="https://mail.google.com">
+              <button type="button" id="browse" hidden>찾아보기</button>
+            </span>
+          </label>
+        </div>
+        <label>이 펫 메뉴 맨 위에 고정
+          <select name="pet"></select>
+        </label>
+        <div class="actions">
+          <button type="button" id="cancel" hidden>취소</button>
+          <button type="submit" id="submit" class="primary">추가</button>
+        </div>
+      </form>
+
+      <ul id="list"></ul>
+    </section>
+
+    <!-- 상태 -->
+    <section data-tab="status">
+      <h1>상태</h1>
+      <p class="hint">친구들의 지금 상태예요. 몇 초마다 새로 고쳐져요.</p>
+      <div class="card coins-row">
+        <span class="coins" id="coins">🪙 -</span>
+        <button id="feedAll" class="primary">🍙 모두 주먹밥 주기</button>
+      </div>
+      <div class="cards" id="statusCards"></div>
+    </section>
+
+    <!-- 일반 -->
+    <section data-tab="general">
+      <h1>일반</h1>
+      <div class="card update-card">
+        <div class="field">
+          <div><b>업데이트</b><small id="updateText">확인 중…</small></div>
+          <div class="btns">
+            <button id="installUpdate" class="primary" hidden>설치하고 다시 시작</button>
+            <button id="checkUpdate">업데이트 확인</button>
+          </div>
+        </div>
+        <div class="progress" id="updateProgress" hidden><div></div></div>
+        <div class="field">
+          <div><b>자동 업데이트</b><small>새 버전을 알아서 받아 두고, 앱을 끌 때 설치해요</small></div>
+          <label class="switch"><input type="checkbox" data-setting="autoUpdate"><span></span></label>
+        </div>
+      </div>
+      <div class="card">
+        <div class="field">
+          <div><b>펫 보이기</b><small>트레이 아이콘을 클릭해도 바뀌어요</small></div>
+          <label class="switch"><input type="checkbox" id="visible"><span></span></label>
+        </div>
+        <div class="field">
+          <div><b>Windows 시작 시 자동 실행</b><small id="autoStartNote">컴퓨터를 켜면 펫도 같이 켜져요</small></div>
+          <label class="switch"><input type="checkbox" id="autoStart"><span></span></label>
+        </div>
+      </div>
+      <div class="card">
+        <div class="field">
+          <div><b>저장 폴더</b><small id="dataDir"></small></div>
+          <button id="openData">폴더 열기</button>
+        </div>
+        <div class="field">
+          <div><b>설정 초기화</b><small>캐릭터·숏컷·키운 기록은 그대로예요</small></div>
+          <button id="reset" class="danger">기본값으로</button>
+        </div>
+      </div>
+      <p class="about" id="about"></p>
+    </section>
+  </main>
+
+  <script src="settings.js"></script>
+</body>
+</html>
