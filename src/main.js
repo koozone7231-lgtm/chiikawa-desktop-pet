@@ -1,14 +1,16 @@
-// 메인 프로세스: 화면 전체를 덮는 투명·클릭 통과 창 하나와 트레이 메뉴, 설정 창을 관리한다.
-const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, shell, dialog } = require('electron');
+// 메인 프로세스: 화면 전체를 덮는 투명·클릭 통과 창 하나와 트레이 메뉴, 설정 창,
+// 일정 저장, 지금 재생 중인 음악 읽기를 관리한다.
+const { app, BrowserWindow, Tray, Menu, ipcMain, screen, nativeImage, shell } = require('electron');
 const path = require('path');
 const fs = require('fs');
-const { spawn } = require('child_process');
 const updater = require('./updater');
+const { createMediaWatcher } = require('./media');
+const ScheduleUtils = require('./renderer/schedule-utils');
 
 const SAVE_FILE = () => path.join(app.getPath('userData'), 'save.json');
-const SHORTCUT_FILE = () => path.join(app.getPath('userData'), 'shortcuts.json');
+const SCHEDULE_FILE = () => path.join(app.getPath('userData'), 'schedules.json');
 const SETTINGS_FILE = () => path.join(app.getPath('userData'), 'settings.json');
-const SPRITES = path.join(__dirname, '..', 'assets', 'sprites');
+const ICON_SPRITE = path.join(__dirname, '..', 'assets', 'sprites', 'chiikawa', 'default.png');
 
 const CHARACTERS = [
   { id: 'chiikawa', name: '치이카와', defaultOn: true },
@@ -34,13 +36,17 @@ const SETTING_RULES = {
   meetings: { def: true, bool: true },
   petGap: { def: 24, min: 0, max: 200 },
   autoUpdate: { def: true, bool: true }, // 새 버전 자동 확인·다운로드
+  showMusic: { def: true, bool: true }, // 지금 재생 중인 음악 표시
+  danceToMusic: { def: true, bool: true }, // 음악이 나오면 펫들이 춤
 };
 
 let win = null;
 let settingsWin = null;
 let tray = null;
-let shortcuts = [];
+let schedules = [];
 let settings = {};
+let media = null;
+let musicState = { playing: false, hasSession: false, title: '', artist: '', app: '', supported: true };
 let updateState = updater.getState();
 let lastState = null; // 펫 창이 마지막으로 저장한 상태 (설정 창의 상태 탭에 보여줌)
 const ui = {
@@ -108,7 +114,7 @@ function openSettings(tab) {
     title: '먼작귀 펫 설정',
     autoHideMenuBar: true,
     backgroundColor: '#fffaf0',
-    icon: path.join(SPRITES, 'chiikawa.png'),
+    icon: ICON_SPRITE,
     webPreferences: { preload: path.join(__dirname, 'preload.js') },
   });
   settingsWin.loadFile(path.join(__dirname, 'renderer', 'settings.html'), { hash: tab || '' });
@@ -161,12 +167,9 @@ function buildTrayMenu() {
       })),
     },
     { type: 'separator' },
-    {
-      label: '숏컷',
-      submenu: shortcuts.length
-        ? shortcuts.map((s) => ({ label: `${s.icon || ''} ${s.name}`.trim(), click: () => launchShortcut(s.id) }))
-        : [{ label: '(등록된 숏컷 없음)', enabled: false }],
-    },
+    todayScheduleTrayItem(),
+    { label: '일정 관리…', click: () => openSettings('schedule') },
+    musicTrayItem(),
     { type: 'separator' },
     {
       label: `집중 모드 (${settings.pomodoroFocusMin}분 뽀모도로)`,
@@ -216,7 +219,7 @@ function toggleVisible() {
 
 function createTray() {
   const icon = nativeImage
-    .createFromPath(path.join(SPRITES, 'chiikawa.png'))
+    .createFromPath(ICON_SPRITE)
     .resize({ width: 16, height: 16 });
   tray = new Tray(icon);
   tray.setToolTip('먼작귀 펫');
@@ -306,74 +309,96 @@ ipcMain.on('pet-command', (_e, cmd) => {
 
 ipcMain.on('open-data-dir', () => shell.openPath(app.getPath('userData')));
 
-// ---------- 숏컷 ----------
-function loadShortcuts() {
+// ---------- 일정 ----------
+function loadSchedules() {
   try {
-    const list = JSON.parse(fs.readFileSync(SHORTCUT_FILE(), 'utf8'));
-    shortcuts = Array.isArray(list) ? list : [];
+    const list = JSON.parse(fs.readFileSync(SCHEDULE_FILE(), 'utf8'));
+    schedules = Array.isArray(list) ? list.map(sanitizeSchedule) : [];
   } catch {
-    shortcuts = [];
+    schedules = [];
   }
 }
 
-function sanitizeShortcut(s) {
-  const type = s.type === 'app' ? 'app' : 'url';
-  let target = String(s.target || '').trim();
-  if (type === 'url' && !/^[a-z][a-z0-9+.-]*:/i.test(target)) target = `https://${target}`;
+function sanitizeSchedule(s) {
+  const date = /^\d{4}-\d{2}-\d{2}$/.test(s.date) ? s.date : ScheduleUtils.dateStr();
+  const time = /^\d{2}:\d{2}$/.test(s.time) ? s.time : '';
   return {
     id: String(s.id || Date.now().toString(36) + Math.random().toString(36).slice(2, 6)),
-    name: String(s.name || '').trim().slice(0, 30) || '숏컷',
-    icon: String(s.icon || '').trim().slice(0, 4),
-    type,
-    target,
-    pet: CHARACTERS.some((c) => c.id === s.pet) ? s.pet : '',
+    title: String(s.title || '').trim().slice(0, 40) || '일정',
+    date,
+    time,
+    repeat: ['none', 'daily', 'weekdays', 'weekly'].includes(s.repeat) ? s.repeat : 'none',
+    // 끝낸 날짜 기록은 최근 60개만 (반복 일정이 끝없이 쌓이지 않게)
+    doneOn: (Array.isArray(s.doneOn) ? s.doneOn : []).filter((d) => /^\d{4}-\d{2}-\d{2}$/.test(d)).slice(-60),
   };
 }
 
-// 렌더러에서는 id만 받고, 실제 실행 대상은 메인이 저장한 목록에서 찾는다.
-async function launchShortcut(id) {
-  const s = shortcuts.find((x) => x.id === id);
-  if (!s) return { ok: false, error: '없는 숏컷이에요' };
-  try {
-    if (s.type === 'url') {
-      if (!/^https?:\/\//i.test(s.target)) return { ok: false, error: 'http/https 주소만 열 수 있어요' };
-      await shell.openExternal(s.target);
-    } else if (/^shell:AppsFolder\\[\w.-]+![\w.-]+$/i.test(s.target)) {
-      // 스토어(MSIX) 앱은 실행 파일 경로가 없어 탐색기로 앱 ID를 연다
-      spawn('explorer.exe', [s.target], { detached: true, stdio: 'ignore' }).unref();
-    } else {
-      const err = await shell.openPath(s.target);
-      if (err) return { ok: false, error: err };
-    }
-    return { ok: true };
-  } catch (err) {
-    return { ok: false, error: String(err.message || err) };
-  }
+function saveSchedules(list) {
+  schedules = (Array.isArray(list) ? list : []).map(sanitizeSchedule);
+  fs.writeFileSync(SCHEDULE_FILE(), JSON.stringify(schedules, null, 2));
+  send('schedules-changed', schedules);
+  if (settingsWin) settingsWin.webContents.send('schedules-changed', schedules);
+  if (tray) buildTrayMenu();
+  return schedules;
 }
 
-ipcMain.handle('get-shortcuts', () => shortcuts);
+function todayScheduleTrayItem() {
+  const today = ScheduleUtils.dateStr();
+  const items = ScheduleUtils.itemsOn(schedules, today);
+  return {
+    label: `오늘 일정 (${items.length})`,
+    submenu: items.length
+      ? items.map((s) => ({
+          label: `${ScheduleUtils.isDone(s, today) ? '✓ ' : ''}${s.time || '하루 종일'}  ${s.title}`,
+          click: () => toggleScheduleDone(s.id, today),
+        }))
+      : [{ label: '(오늘 일정 없음)', enabled: false }],
+  };
+}
 
-ipcMain.handle('save-shortcuts', (_e, list) => {
-  shortcuts = (Array.isArray(list) ? list : []).map(sanitizeShortcut);
-  fs.writeFileSync(SHORTCUT_FILE(), JSON.stringify(shortcuts, null, 2));
-  send('shortcuts-changed', shortcuts);
-  if (tray) buildTrayMenu();
-  return shortcuts;
-});
-
-ipcMain.handle('launch-shortcut', (_e, id) => launchShortcut(id));
-
-ipcMain.handle('pick-app', async () => {
-  const res = await dialog.showOpenDialog(settingsWin, {
-    title: '실행할 앱 선택',
-    properties: ['openFile'],
-    filters: [
-      { name: '앱 / 바로가기', extensions: ['exe', 'lnk', 'bat', 'cmd', 'url'] },
-      { name: '모든 파일', extensions: ['*'] },
-    ],
+function toggleScheduleDone(id, day) {
+  const next = schedules.map((s) => {
+    if (s.id !== id) return s;
+    const done = new Set(s.doneOn || []);
+    if (done.has(day)) done.delete(day);
+    else done.add(day);
+    return { ...s, doneOn: [...done].sort() };
   });
-  return res.canceled ? null : res.filePaths[0];
-});
+  return saveSchedules(next);
+}
+
+ipcMain.handle('get-schedules', () => schedules);
+ipcMain.handle('save-schedules', (_e, list) => saveSchedules(list));
+ipcMain.handle('toggle-schedule-done', (_e, { id, day }) => toggleScheduleDone(id, day));
+
+// 날짜가 바뀌면 트레이의 '오늘 일정'도 새로 만든다
+let trayDay = ScheduleUtils.dateStr();
+setInterval(() => {
+  const today = ScheduleUtils.dateStr();
+  if (today !== trayDay && tray) {
+    trayDay = today;
+    buildTrayMenu();
+  }
+}, 60000);
+
+// ---------- 음악 ----------
+function musicTrayItem() {
+  const m = musicState;
+  if (!m.hasSession || !m.title) return { label: '🎵 재생 중인 음악 없음', enabled: false };
+  const text = `${m.playing ? '🎵' : '⏸'} ${m.title}${m.artist ? ' - ' + m.artist : ''}`;
+  return { label: text.length > 40 ? text.slice(0, 39) + '…' : text, click: () => media && media.command('toggle') };
+}
+
+function onMusicState(s) {
+  const changed = s.title !== musicState.title || s.playing !== musicState.playing || s.hasSession !== musicState.hasSession;
+  musicState = s;
+  send('music-state', s);
+  if (settingsWin) settingsWin.webContents.send('music-state', s);
+  if (changed && tray) buildTrayMenu();
+}
+
+ipcMain.handle('get-music-state', () => musicState);
+ipcMain.on('music-command', (_e, cmd) => media && media.command(cmd));
 
 ipcMain.on('open-settings', (_e, tab) => openSettings(tab));
 
@@ -432,11 +457,13 @@ ipcMain.on('save-state', (_e, state) => {
 
 app.whenReady().then(() => {
   loadSettings();
-  loadShortcuts();
+  loadSchedules();
   createWindow();
   createTray();
+  media = createMediaWatcher(onMusicState);
   updater.init(onUpdateState);
   updater.setEnabled(settings.autoUpdate);
 });
 
 app.on('window-all-closed', () => app.quit());
+app.on('will-quit', () => media && media.stop());

@@ -1,8 +1,7 @@
-// 캐릭터별 성격·속도·대사. 새 캐릭터는 여기 한 항목과 assets/sprites/<id>.png 만 추가하면 된다.
+// 캐릭터별 성격·속도·대사. 그림은 '캐릭터 디자인' 폴더 → tools/make_sprites.py → sprite-manifest.js 로 들어온다.
 const CHARACTERS = {
   chiikawa: {
     name: '치이카와',
-    sprite: '../../assets/sprites/chiikawa.png',
     height: 104,
     walkSpeed: 38,
     special: 'cry',
@@ -23,7 +22,6 @@ const CHARACTERS = {
   },
   hachiware: {
     name: '하치와레',
-    sprite: '../../assets/sprites/hachiware.png',
     height: 104,
     walkSpeed: 48,
     special: 'sing',
@@ -45,7 +43,6 @@ const CHARACTERS = {
   },
   usagi: {
     name: '우사기',
-    sprite: '../../assets/sprites/usagi.png',
     height: 104,
     walkSpeed: 60,
     runSpeed: 380,
@@ -66,7 +63,6 @@ const CHARACTERS = {
   },
   rakko: {
     name: '랏코',
-    sprite: '../../assets/sprites/rakko.png',
     height: 104,
     walkSpeed: 55,
     runSpeed: 320,
@@ -87,7 +83,6 @@ const CHARACTERS = {
   },
   momonga: {
     name: '모몽가',
-    sprite: '../../assets/sprites/momonga.png',
     height: 104,
     walkSpeed: 50,
     special: 'emote', // 귀여움 뽐내기
@@ -108,7 +103,6 @@ const CHARACTERS = {
   },
   shisa: {
     name: '시사',
-    sprite: '../../assets/sprites/shisa.png',
     height: 104,
     walkSpeed: 52,
     special: 'emote', // 열심히 일하기
@@ -130,12 +124,11 @@ const CHARACTERS = {
   },
   kani: {
     name: '헌책방',
-    sprite: '../../assets/sprites/kani.png',
     height: 104,
     walkSpeed: 34,
-    special: 'emote', // 앉아서 책 읽기
+    special: 'emote', // 앉아서 책 읽기 (집중 그림)
     emoteState: 'sit',
-    emoteProp: '📖',
+    emoteSprite: 'focus',
     specialChance: 0.18,
     lines: {
       click: ['헌책… 보시겠어요…?', '괜찮아…?'],
@@ -154,7 +147,6 @@ const CHARACTERS = {
   },
   kurimanju: {
     name: '쿠리만쥬',
-    sprite: '../../assets/sprites/kurimanju.png',
     height: 104,
     walkSpeed: 30,
     special: 'emote', // 한잔 즐기기

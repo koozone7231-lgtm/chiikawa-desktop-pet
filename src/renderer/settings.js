@@ -1,4 +1,4 @@
-// 설정 창: 왼쪽 탭으로 캐릭터·행동·집중·숏컷·상태·일반 설정을 바꾼다. 바꾸는 즉시 저장된다.
+// 설정 창: 왼쪽 탭으로 캐릭터·행동·집중·일정·상태·일반 설정을 바꾼다. 바꾸는 즉시 저장된다.
 const api = window.petApi;
 const $ = (sel) => document.querySelector(sel);
 const $$ = (sel) => [...document.querySelectorAll(sel)];
@@ -14,7 +14,7 @@ const PETS = [
   { id: 'kurimanju', name: '쿠리만쥬', desc: '여유로운 동네 미식가' },
 ];
 const PET_NAMES = Object.fromEntries(PETS.map((p) => [p.id, p.name]));
-const sprite = (id) => `../../assets/sprites/${id}.png`;
+const sprite = (id) => `../../assets/sprites/${id}/default.png`;
 
 let settings = {};
 let appState = {};
@@ -222,65 +222,57 @@ $('#feedAll').addEventListener('click', () => {
   setTimeout(refreshStatus, 300);
 });
 
-// ---------- 숏컷 ----------
+// ---------- 일정 ----------
+const SU = window.ScheduleUtils;
 const form = $('#form');
-const listEl = $('#list');
-const browseBtn = $('#browse');
 const submitBtn = $('#submit');
 const cancelBtn = $('#cancel');
-let shortcuts = [];
+let schedules = [];
 let editingId = null;
-
-function syncTypeUi() {
-  const isApp = form.type.value === 'app';
-  browseBtn.hidden = !isApp;
-  form.target.placeholder = isApp ? 'C:\\Program Files\\...\\app.exe' : 'https://mail.google.com';
-}
 
 function resetForm() {
   form.reset();
+  form.date.value = SU.dateStr();
   editingId = null;
   submitBtn.textContent = '추가';
   cancelBtn.hidden = true;
-  syncTypeUi();
 }
 
-function renderShortcuts() {
-  if (!shortcuts.length) {
-    listEl.innerHTML = '<li class="empty">아직 숏컷이 없어요</li>';
-    return;
-  }
-  listEl.innerHTML = shortcuts
-    .map(
-      (s) => `
-      <li data-id="${esc(s.id)}">
-        <span class="icon">${esc(s.icon || (s.type === 'app' ? '🗂️' : '🌐'))}</span>
-        <span class="info">
-          <span><b>${esc(s.name)}</b>${s.pet ? `<em>★ ${PET_NAMES[s.pet]}</em>` : ''}</span>
-          <small>${esc(s.target)}</small>
-        </span>
-        <button data-act="run">열기</button>
-        <button data-act="edit">수정</button>
-        <button data-act="del" class="danger">삭제</button>
-      </li>`
-    )
-    .join('');
+// 일정 한 줄. day가 있으면(오늘 목록) 완료 체크 버튼을 붙인다. 날짜 글자는 부르는 쪽에서 앞에 붙인다.
+function schedRow(item, day) {
+  const done = day && SU.isDone(item, day);
+  const repeat = item.repeat && item.repeat !== 'none' ? `<em>${SU.REPEAT_LABELS[item.repeat]}</em>` : '';
+  return `
+    <li data-id="${esc(item.id)}" class="${done ? 'done' : ''}">
+      ${day ? `<button class="chk" data-act="done" data-day="${day}" title="완료 표시">${done ? '✓' : ''}</button>` : ''}
+      <span class="when">${item.time || '종일'}</span>
+      <span class="info"><b>${esc(item.title)}</b>${repeat}</span>
+      <button data-act="edit">수정</button>
+      <button data-act="del" class="danger">삭제</button>
+    </li>`;
 }
 
-async function persistShortcuts(next) {
-  shortcuts = await api.saveShortcuts(next);
-  renderShortcuts();
+function renderSchedules() {
+  const today = SU.dateStr();
+  const todays = SU.itemsOn(schedules, today);
+  $('#todayList').innerHTML = todays.length ? todays.map((s) => schedRow(s, today)).join('') : '<li class="empty">오늘 일정이 없어요</li>';
+  const ups = SU.upcoming(schedules, today, 7);
+  $('#upcomingList').innerHTML = ups.length
+    ? ups.map(({ day, item }) => schedRow(item, null).replace('<span class="when">', `<span class="when">${SU.dayLabel(day, today)} `)).join('')
+    : '<li class="empty">다가오는 일정이 없어요</li>';
+  const all = [...schedules].sort((a, b) => (a.date + (a.time || '')).localeCompare(b.date + (b.time || '')));
+  $('#allList').innerHTML = all.length
+    ? all
+        .map((s) => schedRow(s, null).replace('<span class="when">', `<span class="when">${s.repeat === 'none' ? SU.dayLabel(s.date, today) : SU.dayLabel(s.date, today) + '부터'} `))
+        .join('')
+    : '<li class="empty">아직 일정이 없어요</li>';
+}
+
+async function persistSchedules(next) {
+  schedules = await api.saveSchedules(next);
+  renderSchedules();
   flashSaved();
 }
-
-form.type.addEventListener('change', syncTypeUi);
-
-browseBtn.addEventListener('click', async () => {
-  const file = await api.pickApp();
-  if (!file) return;
-  form.target.value = file;
-  if (!form.name.value) form.name.value = file.split(/[\\/]/).pop().replace(/\.(exe|lnk|bat|cmd|url)$/i, '');
-});
 
 cancelBtn.addEventListener('click', resetForm);
 
@@ -288,59 +280,66 @@ form.addEventListener('submit', async (e) => {
   e.preventDefault();
   const item = {
     id: editingId || undefined,
-    name: form.name.value,
-    icon: form.icon.value,
-    type: form.type.value,
-    target: form.target.value,
-    pet: form.pet.value,
+    title: form.title.value,
+    date: form.date.value,
+    time: form.time.value,
+    repeat: form.repeat.value,
   };
-  // 한 펫에는 숏컷 하나만 고정
-  const next = shortcuts
-    .map((s) => (item.pet && s.pet === item.pet && s.id !== editingId ? { ...s, pet: '' } : s))
-    .filter((s) => s.id !== editingId);
+  let next;
   if (editingId) {
-    const idx = shortcuts.findIndex((s) => s.id === editingId);
-    next.splice(idx, 0, item);
+    next = schedules.map((s) => (s.id === editingId ? { ...s, ...item, id: s.id } : s));
   } else {
-    next.push(item);
+    next = [...schedules, { ...item, doneOn: [] }];
   }
-  await persistShortcuts(next);
+  await persistSchedules(next);
   resetForm();
 });
 
-listEl.addEventListener('click', async (e) => {
-  const btn = e.target.closest('button');
+$('section[data-tab="schedule"]').addEventListener('click', async (e) => {
+  const btn = e.target.closest('button[data-act]');
   const li = e.target.closest('li[data-id]');
   if (!btn || !li) return;
-  const s = shortcuts.find((x) => x.id === li.dataset.id);
+  const s = schedules.find((x) => x.id === li.dataset.id);
   if (!s) return;
-  if (btn.dataset.act === 'run') {
-    const res = await api.launchShortcut(s.id);
-    if (!res.ok) alert(`열지 못했어요: ${res.error}`);
+  if (btn.dataset.act === 'done') {
+    schedules = await api.toggleScheduleDone(s.id, btn.dataset.day);
+    renderSchedules();
   } else if (btn.dataset.act === 'edit') {
     editingId = s.id;
-    for (const k of ['name', 'icon', 'type', 'target', 'pet']) form[k].value = s[k] || '';
+    for (const k of ['title', 'date', 'time', 'repeat']) form[k].value = s[k] || '';
     submitBtn.textContent = '저장';
     cancelBtn.hidden = false;
-    syncTypeUi();
-    form.name.focus();
+    form.title.focus();
+    form.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } else if (btn.dataset.act === 'del') {
-    if (!confirm(`'${s.name}' 숏컷을 지울까요?`)) return;
-    await persistShortcuts(shortcuts.filter((x) => x.id !== s.id));
+    if (!confirm(`'${s.title}' 일정을 지울까요?`)) return;
+    await persistSchedules(schedules.filter((x) => x.id !== s.id));
     if (editingId === s.id) resetForm();
   }
 });
 
-// 숏컷 고정 펫 목록도 캐릭터 목록에서 만든다
-form.pet.innerHTML = '<option value="">없음</option>' + PETS.map((p) => `<option value="${p.id}">${p.name}</option>`).join('');
+api.onSchedulesChanged((list) => {
+  schedules = list;
+  renderSchedules();
+});
+
+// ---------- 음악 ----------
+function renderMusic(m) {
+  const el = $('#musicNow');
+  if (!m || m.supported === false) el.textContent = '이 PC에서는 음악 정보를 읽을 수 없어요';
+  else if (!m.hasSession || !m.title) el.textContent = '재생 중인 음악 없음';
+  else el.textContent = `${m.playing ? '♪ 재생 중' : '⏸ 일시 정지'} · ${m.title}${m.artist ? ' - ' + m.artist : ''}${m.app ? ' (' + m.app + ')' : ''}`;
+}
+api.onMusicState(renderMusic);
 
 // ---------- 시작 ----------
 (async () => {
-  [settings, appState, shortcuts] = await Promise.all([api.getSettings(), api.getAppState(), api.getShortcuts()]);
+  [settings, appState, schedules] = await Promise.all([api.getSettings(), api.getAppState(), api.getSchedules()]);
   renderSettings();
   renderAppState();
-  syncTypeUi();
-  renderShortcuts();
+  resetForm();
+  renderSchedules();
+  renderMusic(await api.getMusicState());
   renderUpdate(await api.getUpdateState());
   showTab(location.hash.slice(1) || 'pets');
 })();

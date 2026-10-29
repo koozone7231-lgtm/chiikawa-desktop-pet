@@ -43,6 +43,9 @@ html, body {
 .s-sad     { transform: scaleY(0.93); filter: saturate(0.5) brightness(0.92); }
 .s-sleep   { transform: scaleY(0.86) scaleX(1.08) rotate(-4deg); filter: brightness(0.9); animation: snore 3s ease-in-out infinite; }
 .s-peek    { cursor: pointer; }
+.s-dance   { animation: dance 0.6s ease-in-out infinite; }
+.s-work    { animation: sway 1.6s ease-in-out infinite; }
+.s-cheer   { animation: hop 0.35s ease-in-out infinite; }
 .s-land    { animation: squash 0.35s ease-out; }
 .s-held    { animation: dangle 0.8s ease-in-out infinite; cursor: grabbing; }
 .s-cry     { animation: shake 0.12s linear infinite; }
@@ -60,6 +63,7 @@ html, body {
 @keyframes shake   { 0%, 100% { transform: translateX(-2px); } 50% { transform: translateX(2px); } }
 @keyframes sway    { 0%, 100% { transform: rotate(-6deg); } 50% { transform: rotate(6deg); } }
 @keyframes wiggle  { 0%, 100% { transform: rotate(-5deg) translateY(0); } 50% { transform: rotate(5deg) translateY(-4px); } }
+@keyframes dance   { 0%, 100% { transform: rotate(-7deg) translateY(0); } 25% { transform: rotate(0) translateY(-7px); } 50% { transform: rotate(7deg) translateY(0); } 75% { transform: rotate(0) translateY(-7px); } }
 @keyframes nibble  { 50% { transform: scaleY(0.95) translateY(1px); } }
 
 /* 말풍선 */
@@ -175,7 +179,7 @@ html, body {
 #menu button.off { opacity: 0.45; }
 #menu .label { margin: 10px 0 0; color: #888; font-size: 11px; }
 
-/* 숏컷 / 놀아주기 탭 */
+/* 펫 메뉴 탭 (일정 / 음악 / 놀아주기) */
 #menu .tabs { display: flex; gap: 4px; margin-bottom: 8px; }
 #menu .tabs button.tab {
   flex: 1;
@@ -190,12 +194,30 @@ html, body {
 }
 #menu .tabs button.tab.on { background: #ffd6e2; border-color: #3a3a3a; color: #333; }
 
-#menu .sc-list { display: flex; flex-direction: column; gap: 4px; max-height: 220px; overflow-y: auto; }
-#menu button.sc { flex-direction: row; justify-content: flex-start; gap: 8px; padding: 7px 10px; text-align: left; }
-#menu button.sc .ic { font-size: 16px; width: 20px; text-align: center; }
-#menu button.sc .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#menu button.sc .pin { color: #e2668b; }
-#menu .empty { color: #999; text-align: center; padding: 14px 0; }
+/* 일정 탭 */
+#menu .sch-list { display: flex; flex-direction: column; gap: 4px; max-height: 200px; overflow-y: auto; margin-top: 4px; }
+#menu button.sch { flex-direction: row; justify-content: flex-start; gap: 7px; padding: 6px 8px; text-align: left; }
+#menu button.sch .chk { width: 16px; height: 16px; border: 1.5px solid #3a3a3a; border-radius: 5px; flex: 0 0 auto; font-size: 11px; line-height: 14px; text-align: center; color: #fff; }
+#menu button.sch.done .chk { background: #8ccf7e; border-color: #5a9b4d; }
+#menu button.sch .tm { color: #a07a2c; font-size: 11px; width: 34px; flex: 0 0 auto; }
+#menu button.sch .nm { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#menu button.sch.done .nm { text-decoration: line-through; color: #aaa; }
+#menu .up { display: flex; gap: 6px; margin: 4px 0; font-size: 11.5px; }
+#menu .up span { color: #a07a2c; flex: 0 0 auto; }
+#menu .up b { font-weight: normal; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* 음악 탭 */
+#menu .music { display: flex; align-items: center; gap: 10px; margin: 2px 0 4px; }
+#menu .music .disc { font-size: 34px; }
+#menu .music .disc.spin { animation: spin 3s linear infinite; }
+#menu .music .meta { display: flex; flex-direction: column; min-width: 0; }
+#menu .music .meta b, #menu .music .meta span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+#menu .music .meta span { color: #666; }
+#menu .music .meta small { color: #999; font-size: 10.5px; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+#menu .empty { color: #999; text-align: center; padding: 14px 0; line-height: 1.6; }
+#menu .empty small { font-size: 10.5px; }
 #menu button.edit { width: 100%; margin-top: 8px; flex-direction: row; justify-content: center; border-style: dashed; color: #777; }
 
 /* 공놀이 공 */
@@ -212,3 +234,22 @@ html, body {
   60%  { transform: translateY(-14px) rotate(-60deg); }
   to   { transform: none; }
 }
+
+/* 지금 재생 중 (화면 왼쪽 아래) */
+#nowPlaying {
+  position: fixed;
+  left: 10px;
+  bottom: 6px;
+  max-width: 280px;
+  padding: 4px 11px;
+  background: rgba(255, 250, 240, 0.92);
+  border: 1.5px solid #3a3a3a;
+  border-radius: 999px;
+  font-size: 12px;
+  color: #333;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  pointer-events: none;
+}
+#nowPlaying.paused { opacity: 0.55; }

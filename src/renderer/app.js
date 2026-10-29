@@ -2,6 +2,8 @@
 const api = window.petApi;
 const stage = document.getElementById('stage');
 const menuEl = document.getElementById('menu');
+const nowPlayingEl = document.getElementById('nowPlaying');
+const SU = window.ScheduleUtils;
 
 const COIN_EVERY_MIN = 5;
 const OFFLINE_CAP_MIN = 240;
@@ -17,17 +19,19 @@ let settings = {
   peekVisible: 0.6, // 집중 모드에서 화면 아래 끝 위로 보이는 몸 높이 비율
   meetings: true,
   petGap: 24, // 캐릭터 사이 간격(px). 0이면 겹쳐 걸어도 됨
+  showMusic: true, // 지금 재생 중인 음악 표시
+  danceToMusic: true, // 음악이 나오면 춤
 };
 const CHATTER_RATE = { normal: 1, less: 0.35, off: 0 };
 
 const world = {
   width: window.innerWidth,
   focus: false,
+  music: { playing: false, hasSession: false, title: '', artist: '', app: '' },
   get isNight() {
     const h = new Date().getHours();
     return h >= 0 && h < 6;
   },
-  // 치이카와가 울면 옆에 있던 하치와레가 다정하게 한마디
   // 치이카와가 울면 가까이 있던 다정한 친구(하치와레·헌책방)가 한마디
   onCry(crier) {
     const near = pets
@@ -66,15 +70,18 @@ let activeMin = 0;
 let sinceBreakMin = 0;
 let sinceCoinMin = 0;
 let pomodoro = null; // { phase: 'focus'|'rest', leftMin }
-let shortcuts = []; // 메인이 관리하는 목록의 사본 (실행은 id로 요청)
+let schedules = []; // 메인이 schedules.json에 저장하는 일정의 사본
+let briefDay = null; // 하루 한 번 아침 일정 안내를 한 날짜
+const firedReminders = new Set(); // 이미 알려 준 일정 알림 (id|날짜|10분 전/정각)
 const pairCooldown = new Map();
 
 // ---------- 시작 ----------
 (async function init() {
   const saved = (await api.loadState()) || {};
   coins = Number.isFinite(saved.coins) ? saved.coins : 30;
-  shortcuts = (await api.getShortcuts()) || [];
+  schedules = (await api.getSchedules()) || [];
   settings = { ...settings, ...((await api.getSettings()) || {}) };
+  briefDay = saved.briefDay || null;
   const enabled = saved.enabled || {};
 
   let onCount = 0;
@@ -93,8 +100,11 @@ const pairCooldown = new Map();
   if (saved.focus) setFocus(true);
 
   setTimeout(greet, 1500);
+  setTimeout(briefToday, 5000);
+  onMusicState((await api.getMusicState()) || world.music);
   requestAnimationFrame(loop);
   setInterval(minuteTick, 60_000);
+  setInterval(checkReminders, 20_000);
   setInterval(save, 30_000);
   window.addEventListener('beforeunload', save);
 })();
@@ -124,6 +134,57 @@ function greet() {
     h < 22 ? '오늘도 수고했어!' : '슬슬 잘 시간이야~';
   const p = randomVisiblePet();
   if (p) p.say(text, 3500, true);
+}
+
+// 하루 처음 켰을 때 오늘 일정을 읽어 준다
+function briefToday() {
+  const today = SU.dateStr();
+  if (briefDay === today) return;
+  const items = SU.itemsOn(schedules, today).filter((s) => !SU.isDone(s, today));
+  briefDay = today;
+  save();
+  if (!items.length) return;
+  const first = items[0];
+  const p = randomVisiblePet();
+  if (p) p.cheer(`오늘 일정 ${items.length}개!\n${first.time ? first.time + ' ' : ''}${first.title}${items.length > 1 ? ' 외' : ''}`, 6000);
+}
+
+// 시간 정한 일정: 10분 전과 정각에 펫이 알려 준다
+function checkReminders() {
+  const now = new Date();
+  const today = SU.dateStr(now);
+  const nowMin = now.getHours() * 60 + now.getMinutes();
+  for (const s of SU.itemsOn(schedules, today)) {
+    if (!s.time || SU.isDone(s, today)) continue;
+    const [h, m] = s.time.split(':').map(Number);
+    const diff = h * 60 + m - nowMin;
+    let kind = null;
+    if (diff <= 10 && diff > 8) kind = 'soon';
+    else if (diff <= 0 && diff > -2) kind = 'now';
+    if (!kind) continue;
+    const key = `${s.id}|${today}|${kind}`;
+    if (firedReminders.has(key)) continue;
+    firedReminders.add(key);
+    const p = randomVisiblePet();
+    if (p) p.cheer(kind === 'soon' ? `10분 뒤 '${s.title}'이야!` : `'${s.title}' 시간이야!`, 8000);
+  }
+}
+
+// 지금 재생 중인 음악: 화면 왼쪽 아래 작은 표시 + 곡이 바뀌면 펫이 알려 줌
+function onMusicState(m) {
+  const prev = world.music;
+  world.music = m;
+  const show = settings.showMusic && m.hasSession && m.title;
+  nowPlayingEl.classList.toggle('hidden', !show);
+  nowPlayingEl.classList.toggle('paused', !m.playing);
+  if (show) nowPlayingEl.textContent = `${m.playing ? '♪' : '⏸'} ${m.title}${m.artist ? ' · ' + m.artist : ''}`;
+  if (settings.showMusic && m.playing && m.title && m.title !== prev.title) {
+    const p = randomVisiblePet();
+    if (p && !world.focus) p.say(`♪ ${m.title}`, 3500, true);
+  }
+  // 음악이 멈추면 춤추던 친구들은 춤을 멈춘다
+  if (!m.playing) for (const p of pets) if (p.state === 'dance') p.stateLeft = Math.min(p.stateLeft, 0.5);
+  if (openMenuPet && menuTab === 'music') renderMenu();
 }
 
 function randomVisiblePet() {
@@ -188,7 +249,7 @@ function minuteTick() {
         ? { phase: 'rest', leftMin: settings.pomodoroRestMin }
         : { phase: 'focus', leftMin: settings.pomodoroFocusMin };
       const p = pets.find((q) => q.id === 'hachiware' && q.enabled) || randomVisiblePet();
-      if (p) p.say(toRest ? `${settings.pomodoroFocusMin}분 끝! ${settings.pomodoroRestMin}분 쉬자~` : '다시 집중해볼까?', 6000, true);
+      if (p) p.cheer(toRest ? `${settings.pomodoroFocusMin}분 끝! ${settings.pomodoroRestMin}분 쉬자~` : '다시 집중해볼까?', 6000);
       if (toRest) coins += 3;
     }
     return;
@@ -198,7 +259,7 @@ function minuteTick() {
   if (settings.breakEveryMin > 0 && sinceBreakMin >= settings.breakEveryMin) {
     sinceBreakMin = 0;
     const p = randomVisiblePet();
-    if (p) p.say(`${settings.breakEveryMin}분 지났어! 좀 쉬자~`, 6000, true);
+    if (p) p.cheer(`${settings.breakEveryMin}분 지났어! 좀 쉬자~`, 6000);
   } else if (Math.random() < 0.08 * CHATTER_RATE[settings.chatter]) {
     const h = pets.find((q) => q.id === 'hachiware' && q.enabled);
     if (h && !h.busy) h.say(h.line('cheer'), 3000);
@@ -212,6 +273,7 @@ function save() {
     focus: world.focus,
     enabled: Object.fromEntries(pets.map((p) => [p.id, p.enabled])),
     pets: Object.fromEntries(pets.map((p) => [p.id, p.toJSON()])),
+    briefDay,
     lastSeen: Date.now(),
   };
   api.saveState(state);
@@ -336,18 +398,6 @@ window.addEventListener('pointercancel', endDrag);
 // 포인터 캡처가 풀렸는데 pointerup을 못 받은 경우에도 펫이 손에 붙어 있지 않게
 stage.addEventListener('lostpointercapture', () => setTimeout(endDrag, 0));
 
-// ---------- 숏컷 ----------
-async function launch(pet, s) {
-  pet.say(`${s.icon || ''} 다녀올게!`.trim(), 1800, true);
-  const res = await api.launchShortcut(s.id);
-  if (!res.ok) {
-    pet.say(`못 열었어…\n${res.error}`, 3500, true);
-    return;
-  }
-  coins += 1;
-  pet.stats.affinity += 1;
-}
-
 stage.addEventListener('contextmenu', (e) => {
   const pet = petFromEvent(e);
   if (!pet) return;
@@ -357,13 +407,13 @@ stage.addEventListener('contextmenu', (e) => {
 
 // ---------- 펫 메뉴 ----------
 let openMenuPet = null;
-let menuTab = 'shortcuts'; // 'shortcuts' | 'play'
+let menuTab = 'schedule'; // 'schedule' | 'music' | 'play'
 let menuCloseTimer = null;
 
 function openMenu(pet) {
   if (openMenuPet && openMenuPet !== pet) openMenuPet.unpause();
   openMenuPet = pet;
-  menuTab = 'shortcuts';
+  menuTab = 'schedule';
   pet.pause(); // 메뉴가 열려 있는 동안은 제자리에 서 있는다
   menuEl.classList.remove('hidden');
   renderMenu();
@@ -399,22 +449,53 @@ function bar(label, value) {
   return `<div class="stat"><span>${label}</span><div class="track"><div class="fill ${cls}" style="width:${v}%"></div></div><b>${v}</b></div>`;
 }
 
-function renderShortcutPanel(p) {
-  // 이 펫에 고정한 숏컷을 맨 위로
-  const list = [...shortcuts].sort((a, b) => (b.pet === p.id) - (a.pet === p.id));
-  const items = list.length
-    ? list
-        .map(
-          (sc) => `<button class="sc" data-act="shortcut" data-id="${escapeHtml(sc.id)}" title="${escapeHtml(sc.target)}">
-            <span class="ic">${escapeHtml(sc.icon || (sc.type === 'app' ? '🗂️' : '🌐'))}</span>
-            <span class="nm">${escapeHtml(sc.name)}</span>${sc.pet === p.id ? '<span class="pin">★</span>' : ''}
-          </button>`
-        )
+function renderSchedulePanel() {
+  const today = SU.dateStr();
+  const items = SU.itemsOn(schedules, today);
+  const list = items.length
+    ? items
+        .map((s) => {
+          const done = SU.isDone(s, today);
+          return `<button class="sch ${done ? 'done' : ''}" data-act="sch-done" data-id="${escapeHtml(s.id)}" title="눌러서 완료 표시">
+            <span class="chk">${done ? '✓' : ''}</span>
+            <span class="tm">${s.time || '종일'}</span>
+            <span class="nm">${escapeHtml(s.title)}</span>
+          </button>`;
+        })
         .join('')
-    : '<div class="empty">등록된 숏컷이 없어요</div>';
+    : '<div class="empty">오늘 일정이 없어요</div>';
+  const next = SU.upcoming(schedules, today, 7).slice(0, 3);
+  const upcoming = next.length
+    ? '<div class="label">다가오는 일정</div>' +
+      next.map(({ day, item }) => `<div class="up"><span>${SU.dayLabel(day, today)} ${item.time || ''}</span><b>${escapeHtml(item.title)}</b></div>`).join('')
+    : '';
   return `
-    <div class="sc-list">${items}</div>
-    <button class="edit" data-act="settings">⚙️ 숏컷 추가·편집</button>`;
+    <div class="label">오늘 · ${SU.dayLabel(today, '')}</div>
+    <div class="sch-list">${list}</div>
+    ${upcoming}
+    <button class="edit" data-act="settings" data-tab="schedule">📅 일정 추가·편집</button>`;
+}
+
+function renderMusicPanel() {
+  const m = world.music;
+  if (m.supported === false) return '<div class="empty">이 PC에서는 음악 정보를 읽을 수 없어요</div>';
+  if (!m.hasSession || !m.title) {
+    return '<div class="empty">지금 재생 중인 음악이 없어요<br><small>Spotify·멜론·YouTube 등을 틀면 여기에 보여요</small></div>';
+  }
+  return `
+    <div class="music">
+      <div class="disc ${m.playing ? 'spin' : ''}">💿</div>
+      <div class="meta">
+        <b>${escapeHtml(m.title)}</b>
+        <span>${escapeHtml(m.artist || '')}</span>
+        <small>${escapeHtml(m.app || '')} · ${m.playing ? '재생 중' : '일시 정지'}</small>
+      </div>
+    </div>
+    <div class="row">
+      <button data-act="music" data-cmd="prev">⏮<small>이전</small></button>
+      <button data-act="music" data-cmd="toggle">${m.playing ? '⏸<small>일시 정지</small>' : '▶<small>재생</small>'}</button>
+      <button data-act="music" data-cmd="next">⏭<small>다음</small></button>
+    </div>`;
 }
 
 function renderPlayPanel(p) {
@@ -449,8 +530,8 @@ function renderMenu() {
   const tab = (id, label) => `<button class="tab ${menuTab === id ? 'on' : ''}" data-act="tab" data-tab="${id}">${label}</button>`;
   menuEl.innerHTML = `
     <div class="head"><b>${p.def.name}</b><span class="lv">Lv.${level} ♥${p.stats.affinity}</span><button class="x" data-act="close">✕</button></div>
-    <div class="tabs">${tab('shortcuts', '🔗 숏컷')}${tab('play', '🎈 놀아주기')}</div>
-    <div class="panel">${menuTab === 'play' ? renderPlayPanel(p) : renderShortcutPanel(p)}</div>`;
+    <div class="tabs">${tab('schedule', '📅 일정')}${tab('music', '🎵 음악')}${tab('play', '🎈 놀아주기')}</div>
+    <div class="panel">${menuTab === 'play' ? renderPlayPanel(p) : menuTab === 'music' ? renderMusicPanel() : renderSchedulePanel()}</div>`;
   positionMenu();
 }
 
@@ -482,13 +563,19 @@ menuEl.addEventListener('click', (e) => {
   } else if (act === 'pet') {
     p.lastPetAt = 0;
     p.onPet();
-  } else if (act === 'shortcut') {
-    const sc = shortcuts.find((s) => s.id === btn.dataset.id);
-    closeMenu();
-    if (sc) launch(p, sc);
-    return;
+  } else if (act === 'sch-done') {
+    const today = SU.dateStr();
+    const item = schedules.find((s) => s.id === btn.dataset.id);
+    if (item && !SU.isDone(item, today)) {
+      p.cheer('잘했어!', 1800);
+      p.stats.affinity += 1;
+      coins += 1;
+    }
+    api.toggleScheduleDone(btn.dataset.id, today);
+  } else if (act === 'music') {
+    api.musicCommand(btn.dataset.cmd);
   } else if (act === 'settings') {
-    api.openSettings('shortcuts');
+    api.openSettings(btn.dataset.tab);
     closeMenu();
     return;
   } else if (act === 'sleep') {
@@ -563,6 +650,7 @@ api.onCommand(({ cmd, payload }) => {
   } else if (cmd === 'settings-changed') {
     settings = { ...settings, ...payload };
     applySettings();
+    onMusicState(world.music);
     return;
   } else if (cmd === 'save-now') {
     save();
@@ -571,9 +659,12 @@ api.onCommand(({ cmd, payload }) => {
     const p = randomVisiblePet();
     if (p) p.say(`새 버전 v${payload}이 왔어!\n트레이에서 설치할 수 있어`, 6000, true);
     return;
-  } else if (cmd === 'shortcuts-changed') {
-    shortcuts = payload || [];
+  } else if (cmd === 'schedules-changed') {
+    schedules = payload || [];
     if (openMenuPet) renderMenu();
+    return;
+  } else if (cmd === 'music-state') {
+    onMusicState(payload);
     return;
   } else if (cmd === 'feed-all') {
     const snack = SNACKS[0];

@@ -5,6 +5,20 @@ const rand = (a, b) => a + Math.random() * (b - a);
 const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
 const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v));
 
+// 상태 → 보여 줄 그림(상황). 그 상황 그림이 없는 캐릭터는 SPRITE_FALLBACK을 거쳐 '기본'으로.
+const STATE_SPRITE = {
+  eat: 'eat',
+  sleep: 'sleep',
+  happy: 'happy',
+  meet: 'greet',
+  peek: 'focus',
+  dance: 'dance',
+  cheer: 'cheer',
+  work: 'work',
+  sing: 'special',
+};
+const SPRITE_FALLBACK = { greet: 'happy', cheer: 'happy' };
+
 class Pet {
   constructor(id, def, stage, saved) {
     this.id = id;
@@ -41,11 +55,33 @@ class Pet {
     this.imgEl = this.el.querySelector('img');
     this.imgEl.style.height = `${this.h}px`;
     this.imgEl.onload = () => {
+      // 그림마다 가로 폭이 달라서, 바꿀 때 몸 가운데가 제자리에 있도록 x를 맞춘다
+      const oldW = this.w;
       this.w = Math.round((this.h * this.imgEl.naturalWidth) / this.imgEl.naturalHeight);
       this.el.style.width = `${this.w}px`;
+      if (this.spriteLoadedOnce && this.state !== 'peek') this.x += (oldW - this.w) / 2;
+      this.spriteLoadedOnce = true;
     };
-    this.imgEl.src = def.sprite;
+    this.sprites = (typeof SPRITE_SETS !== 'undefined' && SPRITE_SETS[id]) || {};
+    this.spriteKey = null;
+    this.showSprite('default');
     stage.appendChild(this.el);
+  }
+
+  // 상황 그림으로 바꾼다 (없으면 대체 상황 → 기본). 같은 상황이면 그대로 둔다.
+  showSprite(key) {
+    let k = key;
+    while (k && !this.sprites[k]) k = SPRITE_FALLBACK[k];
+    if (!k) k = 'default';
+    if (k === this.spriteKey) return;
+    const list = this.sprites[k];
+    if (!list || !list.length) return;
+    this.spriteKey = k;
+    this.imgEl.src = pick(list);
+  }
+
+  hasSprite(key) {
+    return !!this.sprites[key];
   }
 
   get ground() {
@@ -63,6 +99,8 @@ class Pet {
     this.bodyEl.className = `body s-${state}`;
     this.el.classList.toggle('peeking', state === 'peek');
     this.propEl.classList.add('hidden');
+    this.showSprite(this.nextSpriteKey || STATE_SPRITE[state] || 'default');
+    this.nextSpriteKey = null;
     if (state === 'sleep') this.say(this.line('sleepy'), 1800, true);
   }
 
@@ -84,6 +122,17 @@ class Pet {
     if (s.mood < 30 && Math.random() < 0.4) {
       this.setState('sad', rand(5, 9));
       this.say('시무룩…');
+      return;
+    }
+    // 음악이 나오면 춤 (설정에서 끌 수 있음)
+    if (world.music && world.music.playing && settings.danceToMusic && Math.random() < 0.5) {
+      this.setState('dance', rand(5, 10));
+      if (Math.random() < 0.3) this.burst('♪', 2, 1000);
+      return;
+    }
+    // 청소 같은 '가끔 하는 일' 그림이 있는 캐릭터
+    if (this.hasSprite('work') && Math.random() < 0.08) {
+      this.setState('work', rand(5, 8));
       return;
     }
     const r = Math.random();
@@ -116,6 +165,7 @@ class Pet {
         this.burst('♪', 5, 1000);
         break;
       case 'emote': // 모몽가·시사·헌책방·쿠리만쥬: 제자리에서 자기다운 행동
+        this.nextSpriteKey = this.def.emoteSprite || 'special';
         this.setState(this.def.emoteState || 'happy', 4);
         if (this.def.emoteProp) this.showProp(this.def.emoteProp);
         if (this.def.emoteFx) this.burst(this.def.emoteFx, 3, 1000);
@@ -362,6 +412,14 @@ class Pet {
   // 상황별 대사 하나 (그 상황 대사가 없는 캐릭터는 클릭 대사로)
   line(key) {
     return pick(this.def.lines[key] || this.def.lines.click);
+  }
+
+  // 알림·응원할 때: 말하면서 응원 그림(없으면 행복 그림)으로 잠깐 바뀐다
+  cheer(text, ms = 5000) {
+    this.say(text, ms, true);
+    if (this.grounded && !['peek', 'held', 'fall', 'eat', 'sleep', 'chase'].includes(this.state)) {
+      this.setState('cheer', 3);
+    }
   }
 
   meet(other) {

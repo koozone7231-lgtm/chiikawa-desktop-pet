@@ -192,7 +192,7 @@ button:hover { background: var(--hover); }
 button.primary { background: var(--pink); font-weight: bold; }
 button.danger:hover { background: #ffd2d2; }
 
-/* 숏컷 폼·목록 */
+/* 일정 폼·목록 */
 form.card { padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
 form .grid { display: flex; gap: 10px; }
 form label { display: flex; flex-direction: column; gap: 4px; flex: 1; font-weight: bold; color: #555; }
@@ -202,19 +202,25 @@ form input, form select { font-weight: normal; }
 .with-btn input { flex: 1; }
 .actions { display: flex; justify-content: flex-end; gap: 6px; }
 
-#list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 8px; }
-#list li {
+h2 { font-size: 14px; margin: 18px 0 8px; color: #5c5549; }
+form .opt { font-weight: normal; color: var(--muted); font-size: 11px; }
+
+ul.sched { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+ul.sched li {
   display: flex;
   align-items: center;
   gap: 8px;
   background: var(--panel);
   border: 1.5px solid var(--soft-line);
   border-radius: 12px;
-  padding: 8px 10px;
+  padding: 7px 10px;
 }
-#list li.empty { color: #999; justify-content: center; }
-#list .icon { font-size: 20px; width: 26px; text-align: center; }
-#list .info { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-#list .info em { font-style: normal; font-size: 11px; color: var(--pink-ink); margin-left: 6px; }
-#list .info small { color: #888; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-#list button { padding: 4px 8px; font-size: 12px; }
+ul.sched li.empty { color: #999; justify-content: center; }
+ul.sched li.done .info b { text-decoration: line-through; color: #aaa; }
+ul.sched .chk { width: 22px; height: 22px; padding: 0; border-radius: 6px; font-size: 13px; line-height: 1; }
+ul.sched li.done .chk { background: #8ccf7e; border-color: #5a9b4d; color: #fff; }
+ul.sched .when { color: #a07a2c; font-size: 12px; min-width: 64px; }
+ul.sched .info { flex: 1; min-width: 0; display: flex; align-items: center; gap: 6px; }
+ul.sched .info b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+ul.sched .info em { font-style: normal; font-size: 11px; color: var(--pink-ink); border: 1px solid var(--pink); border-radius: 6px; padding: 0 5px; }
+ul.sched button[data-act="edit"], ul.sched button[data-act="del"] { padding: 4px 8px; font-size: 12px; }

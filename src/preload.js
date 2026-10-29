@@ -10,11 +10,16 @@ contextBridge.exposeInMainWorld('petApi', {
   dragEnd: () => ipcRenderer.send('drag-end'),
   onDragMove: (fn) => ipcRenderer.on('drag-move', (_e, pt) => fn(pt)),
 
-  // 숏컷
-  getShortcuts: () => ipcRenderer.invoke('get-shortcuts'),
-  saveShortcuts: (list) => ipcRenderer.invoke('save-shortcuts', list),
-  launchShortcut: (id) => ipcRenderer.invoke('launch-shortcut', id),
-  pickApp: () => ipcRenderer.invoke('pick-app'),
+  // 일정
+  getSchedules: () => ipcRenderer.invoke('get-schedules'),
+  saveSchedules: (list) => ipcRenderer.invoke('save-schedules', list),
+  toggleScheduleDone: (id, day) => ipcRenderer.invoke('toggle-schedule-done', { id, day }),
+  onSchedulesChanged: (fn) => ipcRenderer.on('schedules-changed', (_e, list) => fn(list)),
+
+  // 음악
+  getMusicState: () => ipcRenderer.invoke('get-music-state'),
+  musicCommand: (cmd) => ipcRenderer.send('music-command', cmd),
+  onMusicState: (fn) => ipcRenderer.on('music-state', (_e, s) => fn(s)),
 
   // 설정
   openSettings: (tab) => ipcRenderer.send('open-settings', tab),

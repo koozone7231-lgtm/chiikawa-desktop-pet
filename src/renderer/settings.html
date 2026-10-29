@@ -9,14 +9,14 @@
 <body>
   <aside>
     <div class="brand">
-      <img src="../../assets/sprites/chiikawa.png" alt="">
+      <img src="../../assets/sprites/chiikawa/default.png" alt="">
       <span>먼작귀 펫</span>
     </div>
     <nav id="nav">
       <button data-tab="pets">🐾 캐릭터</button>
       <button data-tab="behavior">💬 행동·말풍선</button>
       <button data-tab="focus">📖 집중·알림</button>
-      <button data-tab="shortcuts">🔗 숏컷</button>
+      <button data-tab="schedule">📅 일정</button>
       <button data-tab="status">📊 상태</button>
       <button data-tab="general">⚙️ 일반</button>
     </nav>
@@ -65,6 +65,19 @@
           <label class="switch"><input type="checkbox" data-setting="meetings"><span></span></label>
         </div>
       </div>
+      <div class="card">
+        <div class="field">
+          <div><b>🎵 지금 재생 중인 음악 표시</b><small>Spotify·멜론·YouTube 등에서 나오는 곡을 화면 왼쪽 아래와 펫 메뉴에 보여줘요</small></div>
+          <label class="switch"><input type="checkbox" data-setting="showMusic"><span></span></label>
+        </div>
+        <div class="field">
+          <div><b>음악이 나오면 춤추기</b><small>춤 그림이 있는 친구는 춤 그림으로 바뀌어요</small></div>
+          <label class="switch"><input type="checkbox" data-setting="danceToMusic"><span></span></label>
+        </div>
+        <div class="field">
+          <div><b>지금 재생 중</b><small id="musicNow">-</small></div>
+        </div>
+      </div>
     </section>
 
     <!-- 집중·알림 -->
@@ -97,40 +110,39 @@
       </div>
     </section>
 
-    <!-- 숏컷 -->
-    <section data-tab="shortcuts">
-      <h1>숏컷</h1>
-      <p class="hint">펫을 누르면 열리는 메뉴의 숏컷 탭에서 골라 열 수 있어요. 펫을 정해 두면 그 펫 메뉴 맨 위에 ★로 고정돼요.</p>
+    <!-- 일정 -->
+    <section data-tab="schedule">
+      <h1>일정</h1>
+      <p class="hint">펫을 누르면 오늘 일정이 보이고, 시간을 정한 일정은 10분 전과 정각에 펫이 알려줘요. 하루 처음 켤 때 오늘 일정을 읽어 줘요.</p>
 
       <form id="form" class="card">
         <div class="grid">
-          <label>이름<input name="name" required maxlength="30" placeholder="예: 메일"></label>
-          <label class="small">아이콘<input name="icon" maxlength="4" placeholder="📧"></label>
+          <label>할 일<input name="title" required maxlength="40" placeholder="예: 수학 숙제"></label>
         </div>
         <div class="grid">
-          <label class="small">종류
-            <select name="type">
-              <option value="url">웹페이지</option>
-              <option value="app">앱</option>
+          <label>날짜<input name="date" type="date" required></label>
+          <label>시간 <small class="opt">(비우면 하루 종일)</small><input name="time" type="time"></label>
+          <label class="small">반복
+            <select name="repeat">
+              <option value="none">한 번</option>
+              <option value="daily">매일</option>
+              <option value="weekdays">평일</option>
+              <option value="weekly">매주</option>
             </select>
           </label>
-          <label>주소 / 앱 경로
-            <span class="with-btn">
-              <input name="target" required placeholder="https://mail.google.com">
-              <button type="button" id="browse" hidden>찾아보기</button>
-            </span>
-          </label>
         </div>
-        <label>이 펫 메뉴 맨 위에 고정
-          <select name="pet"></select>
-        </label>
         <div class="actions">
           <button type="button" id="cancel" hidden>취소</button>
           <button type="submit" id="submit" class="primary">추가</button>
         </div>
       </form>
 
-      <ul id="list"></ul>
+      <h2>오늘</h2>
+      <ul class="sched" id="todayList"></ul>
+      <h2>다가오는 7일</h2>
+      <ul class="sched" id="upcomingList"></ul>
+      <h2>전체 일정</h2>
+      <ul class="sched" id="allList"></ul>
     </section>
 
     <!-- 상태 -->
@@ -177,7 +189,7 @@
           <button id="openData">폴더 열기</button>
         </div>
         <div class="field">
-          <div><b>설정 초기화</b><small>캐릭터·숏컷·키운 기록은 그대로예요</small></div>
+          <div><b>설정 초기화</b><small>캐릭터·일정·키운 기록은 그대로예요</small></div>
           <button id="reset" class="danger">기본값으로</button>
         </div>
       </div>
@@ -185,6 +197,7 @@
     </section>
   </main>
 
+  <script src="schedule-utils.js"></script>
   <script src="settings.js"></script>
 </body>
 </html>

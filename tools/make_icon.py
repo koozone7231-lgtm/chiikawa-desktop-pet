@@ -6,7 +6,7 @@ from pathlib import Path
 from PIL import Image
 
 ROOT = Path(__file__).resolve().parent.parent
-SRC = ROOT / "assets" / "sprites" / "chiikawa.png"
+SRC = ROOT / "assets" / "sprites" / "chiikawa" / "default.png"
 OUT = ROOT / "build"
 
 
