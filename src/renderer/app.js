@@ -21,6 +21,8 @@ let settings = {
   petGap: 24, // 캐릭터 사이 간격(px). 0이면 겹쳐 걸어도 됨
   showMusic: true, // 지금 재생 중인 음악 표시
   danceToMusic: true, // 음악이 나오면 춤
+  musicCard: true, // 끌어서 옮길 수 있는 음악 카드
+  focusCard: true, // 끌어서 옮길 수 있는 집중(뽀모도로) 카드
 };
 const CHATTER_RATE = { normal: 1, less: 0.35, off: 0 };
 
@@ -69,7 +71,8 @@ let coins = 30;
 let activeMin = 0;
 let sinceBreakMin = 0;
 let sinceCoinMin = 0;
-let pomodoro = null; // { phase: 'focus'|'rest', leftMin }
+let pomodoro = null; // { phase: 'focus'|'rest', endsAt(ms), totalMs }
+let cardPos = {}; // 카드 위치 { music: {x, y}, focus: {x, y} } — 저장됨
 let schedules = []; // 메인이 schedules.json에 저장하는 일정의 사본
 let briefDay = null; // 하루 한 번 아침 일정 안내를 한 날짜
 const firedReminders = new Set(); // 이미 알려 준 일정 알림 (id|날짜|10분 전/정각)
@@ -82,6 +85,7 @@ const pairCooldown = new Map();
   schedules = (await api.getSchedules()) || [];
   settings = { ...settings, ...((await api.getSettings()) || {}) };
   briefDay = saved.briefDay || null;
+  cardPos = saved.cards || {};
   const enabled = saved.enabled || {};
 
   let onCount = 0;
@@ -174,7 +178,7 @@ function checkReminders() {
 function onMusicState(m) {
   const prev = world.music;
   world.music = m;
-  const show = settings.showMusic && m.hasSession && m.title;
+  const show = settings.showMusic && !settings.musicCard && m.hasSession && m.title;
   nowPlayingEl.classList.toggle('hidden', !show);
   nowPlayingEl.classList.toggle('paused', !m.playing);
   if (show) nowPlayingEl.textContent = `${m.playing ? '♪' : '⏸'} ${m.title}${m.artist ? ' · ' + m.artist : ''}`;
@@ -185,7 +189,116 @@ function onMusicState(m) {
   // 음악이 멈추면 춤추던 친구들은 춤을 멈춘다
   if (!m.playing) for (const p of pets) if (p.state === 'dance') p.stateLeft = Math.min(p.stateLeft, 0.5);
   if (openMenuPet && menuTab === 'music') renderMenu();
+  renderCards();
 }
+
+// ---------- 끌어서 옮기는 카드 (음악 · 집중) ----------
+const cards = {};
+for (const id of ['music', 'focus']) {
+  const el = document.createElement('div');
+  el.className = 'card-widget hidden';
+  el.dataset.card = id;
+  document.body.appendChild(el);
+  cards[id] = el;
+}
+
+function defaultCardPos(id) {
+  return id === 'music' ? { x: 16, y: window.innerHeight - 230 } : { x: window.innerWidth - 250, y: 16 };
+}
+
+function placeCard(id) {
+  const el = cards[id];
+  const pos = cardPos[id] || defaultCardPos(id);
+  const x = clamp(pos.x, 0, Math.max(0, window.innerWidth - el.offsetWidth));
+  const y = clamp(pos.y, 0, Math.max(0, window.innerHeight - el.offsetHeight));
+  el.style.left = `${x}px`;
+  el.style.top = `${y}px`;
+}
+
+// 구조가 바뀔 때만 HTML을 새로 만들고, 1초마다는 글자만 바꾼다 (누르는 중인 버튼이 사라지지 않게)
+function setCardMode(el, mode, html) {
+  if (el.dataset.mode === mode) return;
+  el.dataset.mode = mode;
+  el.innerHTML = html;
+}
+
+const fill = (el, field, text) => {
+  const f = el.querySelector(`[data-f="${field}"]`);
+  if (f && f.textContent !== text) f.textContent = text;
+};
+
+function renderCards() {
+  // 음악 카드
+  const mc = cards.music;
+  const m = world.music;
+  const showMusic = settings.showMusic && settings.musicCard && m.hasSession && m.title;
+  mc.classList.toggle('hidden', !showMusic);
+  if (showMusic) {
+    setCardMode(mc, 'music', `
+      <div class="card-head" data-drag><span>🎵 지금 재생</span><button class="x" data-card-act="close-music" title="카드 닫기">✕</button></div>
+      <div class="card-music">
+        <div class="disc">💿</div>
+        <div class="meta"><b data-f="title"></b><span data-f="artist"></span><small data-f="app"></small></div>
+      </div>
+      <div class="card-btns">
+        <button data-card-act="music" data-cmd="prev" title="이전">⏮</button>
+        <button data-card-act="music" data-cmd="toggle" data-f="toggle" title="재생 / 일시 정지"></button>
+        <button data-card-act="music" data-cmd="next" title="다음">⏭</button>
+      </div>`);
+    fill(mc, 'title', m.title);
+    fill(mc, 'artist', m.artist || '');
+    fill(mc, 'app', `${m.app || ''}${m.app ? ' · ' : ''}${m.playing ? '재생 중' : '일시 정지'}`);
+    fill(mc, 'toggle', m.playing ? '⏸' : '▶');
+    mc.querySelector('.disc').classList.toggle('spin', !!m.playing);
+    placeCard('music');
+  }
+
+  // 집중 카드
+  const fc = cards.focus;
+  fc.classList.toggle('hidden', !settings.focusCard);
+  if (settings.focusCard) {
+    if (pomodoro) {
+      setCardMode(fc, 'running', `
+        <div class="card-head" data-drag><span data-f="phase"></span><button class="x" data-card-act="close-focus" title="카드 닫기">✕</button></div>
+        <div class="card-timer" data-f="time"></div>
+        <div class="card-bar"><div data-f="bar"></div></div>
+        <div class="card-btns">
+          <button data-card-act="skip" data-f="skip"></button>
+          <button data-card-act="stop">⏹ 그만하기</button>
+        </div>`);
+      const left = pomoLeftMs();
+      const mm = String(Math.floor(left / 60000)).padStart(2, '0');
+      const ss = String(Math.floor((left % 60000) / 1000)).padStart(2, '0');
+      fill(fc, 'phase', pomodoro.phase === 'focus' ? '📖 집중하는 중' : '☕ 쉬는 중');
+      fill(fc, 'time', `${mm}:${ss}`);
+      fill(fc, 'skip', pomodoro.phase === 'focus' ? '☕ 바로 쉬기' : '📖 바로 집중');
+      fc.querySelector('[data-f="bar"]').style.width = `${100 - (left / pomodoro.totalMs) * 100}%`;
+      fc.classList.toggle('rest', pomodoro.phase === 'rest');
+    } else {
+      setCardMode(fc, 'idle', `
+        <div class="card-head" data-drag><span>📖 집중</span><button class="x" data-card-act="close-focus" title="카드 닫기">✕</button></div>
+        <div class="card-idle">집중 모드가 꺼져 있어요</div>
+        <div class="card-btns"><button class="primary" data-card-act="start" data-f="start"></button></div>`);
+      fill(fc, 'start', `▶ ${settings.pomodoroFocusMin}분 집중 시작`);
+      fc.classList.remove('rest');
+    }
+    placeCard('focus');
+  }
+}
+
+document.addEventListener('click', (e) => {
+  const btn = e.target.closest('.card-widget button[data-card-act]');
+  if (!btn) return;
+  const act = btn.dataset.cardAct;
+  if (act === 'music') api.musicCommand(btn.dataset.cmd);
+  else if (act === 'close-music') api.updateSettings({ musicCard: false });
+  else if (act === 'close-focus') api.updateSettings({ focusCard: false });
+  else if (act === 'start' || act === 'stop') {
+    setFocus(act === 'start');
+    save();
+  } else if (act === 'skip') checkPomodoro(true);
+  renderCards();
+});
 
 function randomVisiblePet() {
   const visible = pets.filter((p) => p.enabled);
@@ -207,6 +320,8 @@ function loop(now) {
     for (const p of pets) if (p.enabled) p.tickStats(statAcc / 60, world);
     statAcc = 0;
     checkMeetings();
+    checkPomodoro();
+    renderCards();
     if (openMenuPet) renderMenu();
   }
   requestAnimationFrame(loop);
@@ -233,6 +348,26 @@ function checkMeetings() {
   }
 }
 
+// ---------- 뽀모도로 ----------
+function newPhase(phase) {
+  const min = phase === 'focus' ? settings.pomodoroFocusMin : settings.pomodoroRestMin;
+  return { phase, endsAt: Date.now() + min * 60000, totalMs: min * 60000 };
+}
+
+function pomoLeftMs() {
+  return pomodoro ? Math.max(0, pomodoro.endsAt - Date.now()) : 0;
+}
+
+// 1초마다: 시간이 다 되면 집중 ↔ 휴식을 바꾸고 펫이 알려 준다
+function checkPomodoro(skip = false) {
+  if (!pomodoro || (!skip && Date.now() < pomodoro.endsAt)) return;
+  const toRest = pomodoro.phase === 'focus';
+  pomodoro = newPhase(toRest ? 'rest' : 'focus');
+  const p = pets.find((q) => q.id === 'hachiware' && q.enabled) || randomVisiblePet();
+  if (p) p.cheer(toRest ? `${settings.pomodoroFocusMin}분 끝! ${settings.pomodoroRestMin}분 쉬자~` : '다시 집중해볼까?', 6000);
+  if (toRest && !skip) coins += 3;
+}
+
 function minuteTick() {
   activeMin++;
   sinceCoinMin++;
@@ -241,19 +376,7 @@ function minuteTick() {
     coins += 1; // 토벌 보상
   }
 
-  if (pomodoro) {
-    pomodoro.leftMin--;
-    if (pomodoro.leftMin <= 0) {
-      const toRest = pomodoro.phase === 'focus';
-      pomodoro = toRest
-        ? { phase: 'rest', leftMin: settings.pomodoroRestMin }
-        : { phase: 'focus', leftMin: settings.pomodoroFocusMin };
-      const p = pets.find((q) => q.id === 'hachiware' && q.enabled) || randomVisiblePet();
-      if (p) p.cheer(toRest ? `${settings.pomodoroFocusMin}분 끝! ${settings.pomodoroRestMin}분 쉬자~` : '다시 집중해볼까?', 6000);
-      if (toRest) coins += 3;
-    }
-    return;
-  }
+  if (pomodoro) return; // 집중 모드 중엔 휴식 알림·혼잣말 응원 없음
 
   sinceBreakMin++;
   if (settings.breakEveryMin > 0 && sinceBreakMin >= settings.breakEveryMin) {
@@ -274,6 +397,7 @@ function save() {
     enabled: Object.fromEntries(pets.map((p) => [p.id, p.enabled])),
     pets: Object.fromEntries(pets.map((p) => [p.id, p.toJSON()])),
     briefDay,
+    cards: cardPos,
     lastSeen: Date.now(),
   };
   api.saveState(state);
@@ -287,7 +411,7 @@ function setIgnore(ignore) {
   api.setIgnoreMouse(ignore);
 }
 
-const drag = { pet: null, startX: 0, startY: 0, offX: 0, offY: 0, moved: false, samples: [] };
+const drag = { pet: null, card: null, startX: 0, startY: 0, offX: 0, offY: 0, moved: false, samples: [] };
 const rub = { pet: null, lastX: 0, lastDir: 0, flips: [] };
 
 function petFromEvent(e) {
@@ -299,6 +423,11 @@ function petFromEvent(e) {
 // 커서 좌표(drag-move) 둘 다 여기로 온다. 투명 창은 커서가 펫을 벗어나면 Windows가
 // 마우스 이벤트를 안 보내 줄 때가 있어서, 메인 쪽 좌표가 있어야 빨리 끌어도 따라온다.
 function dragTo(x, y) {
+  if (drag.card) {
+    cardPos[drag.card] = { x: Math.round(x - drag.offX), y: Math.round(y - drag.offY) };
+    placeCard(drag.card);
+    return;
+  }
   if (!drag.pet) return;
   const dx = x - drag.startX, dy = y - drag.startY;
   // 집중 모드에서는 들어 옮기지 않는다 (제자리에 가만히)
@@ -317,12 +446,12 @@ function dragTo(x, y) {
 api.onDragMove(({ x, y }) => dragTo(x, y));
 
 window.addEventListener('pointermove', (e) => {
-  if (drag.pet) dragTo(e.clientX, e.clientY);
+  if (drag.pet || drag.card) dragTo(e.clientX, e.clientY);
 });
 
 window.addEventListener('mousemove', (e) => {
-  if (drag.pet) return;
-  const overMenu = e.target.closest && e.target.closest('#menu');
+  if (drag.pet || drag.card) return;
+  const overMenu = e.target.closest && e.target.closest('#menu, .card-widget');
   const pet = petFromEvent(e);
   setIgnore(!(pet || overMenu));
   trackRub(pet, e.clientX);
@@ -372,7 +501,32 @@ stage.addEventListener('pointerdown', (e) => {
   drag.samples = [];
 });
 
+// 카드는 머리줄(제목 부분)을 잡고 끌어서 옮긴다
+document.addEventListener('pointerdown', (e) => {
+  const head = e.target.closest('.card-widget [data-drag]');
+  if (!head || e.button !== 0 || e.target.closest('button')) return;
+  const el = head.closest('.card-widget');
+  e.preventDefault();
+  try {
+    el.setPointerCapture(e.pointerId);
+  } catch {}
+  setIgnore(false);
+  api.dragStart();
+  const r = el.getBoundingClientRect();
+  drag.card = el.dataset.card;
+  drag.offX = e.clientX - r.left;
+  drag.offY = e.clientY - r.top;
+  el.classList.add('dragging');
+});
+
 function endDrag() {
+  if (drag.card) {
+    cards[drag.card].classList.remove('dragging');
+    drag.card = null;
+    api.dragEnd();
+    save();
+    return;
+  }
   const pet = drag.pet;
   if (!pet) return;
   drag.pet = null;
@@ -396,7 +550,7 @@ function endDrag() {
 window.addEventListener('pointerup', endDrag);
 window.addEventListener('pointercancel', endDrag);
 // 포인터 캡처가 풀렸는데 pointerup을 못 받은 경우에도 펫이 손에 붙어 있지 않게
-stage.addEventListener('lostpointercapture', () => setTimeout(endDrag, 0));
+document.addEventListener('lostpointercapture', () => setTimeout(endDrag, 0));
 
 stage.addEventListener('contextmenu', (e) => {
   const pet = petFromEvent(e);
@@ -502,7 +656,7 @@ function renderPlayPanel(p) {
   const s = p.stats;
   const sleeping = p.state === 'sleep';
   const pomo = pomodoro
-    ? `<div class="pomo">${pomodoro.phase === 'focus' ? '📖 집중' : '☕ 휴식'} · ${pomodoro.leftMin}분 남음</div>`
+    ? `<div class="pomo">${pomodoro.phase === 'focus' ? '📖 집중' : '☕ 휴식'} · ${Math.ceil(pomoLeftMs() / 60000)}분 남음</div>`
     : '';
   return `
     ${bar('배부름', s.hunger)}
@@ -520,7 +674,11 @@ function renderPlayPanel(p) {
       <button data-act="ball" ${world.focus ? 'class="off"' : ''}>⚽<small>공놀이</small></button>
       <button data-act="jump" ${world.focus ? 'class="off"' : ''}>🎵<small>재롱 보기</small></button>
       <button data-act="sleep" ${world.focus ? 'class="off"' : ''}>${sleeping ? '☀️<small>깨우기</small>' : '🌙<small>재우기</small>'}</button>
-    </div>`;
+    </div>
+    ${p.poseKeys.length ? `<div class="label">포즈 (그림 바꾸기)</div>
+    <div class="row poses">
+      ${p.poseKeys.map((k) => `<button data-act="pose" data-key="${k}" ${world.focus ? 'class="off"' : ''}>${POSE_LABELS[k]}</button>`).join('')}
+    </div>` : ''}`;
 }
 
 function renderMenu() {
@@ -543,8 +701,12 @@ menuEl.addEventListener('click', (e) => {
   if (act === 'close') return closeMenu();
   if (act === 'tab') {
     menuTab = btn.dataset.tab;
-  } else if ((act === 'ball' || act === 'jump' || act === 'sleep') && world.focus) {
+  } else if ((act === 'ball' || act === 'jump' || act === 'sleep' || act === 'pose') && world.focus) {
     p.say('집중 끝나고 놀자!', 1800, true);
+  } else if (act === 'pose') {
+    closeMenu();
+    p.pose(btn.dataset.key);
+    return;
   } else if (act === 'ball') {
     closeMenu();
     playBall(p);
@@ -622,7 +784,8 @@ menuEl.addEventListener('mouseenter', () => clearTimeout(menuCloseTimer));
 // ---------- 트레이 명령 ----------
 function setFocus(on) {
   world.focus = on;
-  pomodoro = on ? { phase: 'focus', leftMin: settings.pomodoroFocusMin } : null;
+  pomodoro = on ? newPhase('focus') : null;
+  renderCards();
   for (const p of pets) {
     p.quiet = on;
     if (!p.enabled || p.state === 'held') continue;
@@ -651,6 +814,7 @@ api.onCommand(({ cmd, payload }) => {
     settings = { ...settings, ...payload };
     applySettings();
     onMusicState(world.music);
+    renderCards();
     return;
   } else if (cmd === 'save-now') {
     save();

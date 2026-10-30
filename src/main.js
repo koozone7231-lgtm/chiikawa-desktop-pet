@@ -38,6 +38,8 @@ const SETTING_RULES = {
   autoUpdate: { def: true, bool: true }, // 새 버전 자동 확인·다운로드
   showMusic: { def: true, bool: true }, // 지금 재생 중인 음악 표시
   danceToMusic: { def: true, bool: true }, // 음악이 나오면 펫들이 춤
+  musicCard: { def: true, bool: true }, // 끌어서 옮기는 음악 카드
+  focusCard: { def: true, bool: true }, // 끌어서 옮기는 집중(뽀모도로) 카드
 };
 
 let win = null;
@@ -170,6 +172,13 @@ function buildTrayMenu() {
     todayScheduleTrayItem(),
     { label: '일정 관리…', click: () => openSettings('schedule') },
     musicTrayItem(),
+    {
+      label: '카드',
+      submenu: [
+        { label: '🎵 음악 카드', type: 'checkbox', checked: settings.musicCard, click: (i) => updateSettings({ musicCard: i.checked }) },
+        { label: '📖 집중 카드', type: 'checkbox', checked: settings.focusCard, click: (i) => updateSettings({ focusCard: i.checked }) },
+      ],
+    },
     { type: 'separator' },
     {
       label: `집중 모드 (${settings.pomodoroFocusMin}분 뽀모도로)`,
@@ -264,14 +273,17 @@ function getAppState() {
 
 ipcMain.handle('get-settings', () => settings);
 
-ipcMain.handle('update-settings', (_e, patch) => {
+function updateSettings(patch) {
   settings = sanitizeSettings({ ...settings, ...patch });
   updater.setEnabled(settings.autoUpdate);
   fs.writeFileSync(SETTINGS_FILE(), JSON.stringify(settings, null, 2));
   send('settings-changed', settings);
+  if (settingsWin) settingsWin.webContents.send('settings-changed', settings);
   if (tray) buildTrayMenu();
   return settings;
-});
+}
+
+ipcMain.handle('update-settings', (_e, patch) => updateSettings(patch));
 
 ipcMain.handle('reset-settings', () => {
   settings = sanitizeSettings({});

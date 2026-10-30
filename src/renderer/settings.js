@@ -191,6 +191,12 @@ $('#checkUpdate').addEventListener('click', () => api.checkUpdate());
 $('#installUpdate').addEventListener('click', () => api.installUpdate());
 api.onUpdateState(renderUpdate);
 
+// 카드의 ✕나 트레이에서 바꾼 설정도 이 창에 바로 보이게
+api.onSettingsChanged((s) => {
+  settings = s;
+  renderSettings();
+});
+
 // ---------- 상태 ----------
 function bar(label, v) {
   v = Math.round(v);

@@ -19,6 +19,21 @@ const STATE_SPRITE = {
 };
 const SPRITE_FALLBACK = { greet: 'happy', cheer: 'happy' };
 
+// 놀아주기 '포즈' 버튼 순서·이름과, 그 포즈를 할 때 할 말
+const POSE_ORDER = ['eat', 'sleep', 'dance', 'special', 'happy', 'greet', 'focus', 'cheer', 'work'];
+const POSE_LABELS = {
+  eat: '🍙 먹방',
+  sleep: '💤 졸려',
+  dance: '💃 춤',
+  special: '✨ 특기',
+  happy: '😊 행복',
+  greet: '👋 인사',
+  focus: '📖 집중',
+  cheer: '📣 응원',
+  work: '🧹 청소',
+};
+const POSE_LINE = { eat: 'eat', sleep: 'sleepy', dance: 'play', special: 'special', happy: 'pet', greet: 'meet', focus: 'idle', cheer: 'cheer', work: 'idle' };
+
 class Pet {
   constructor(id, def, stage, saved) {
     this.id = id;
@@ -89,7 +104,27 @@ class Pet {
   }
 
   get busy() {
-    return ['held', 'fall', 'eat', 'happy', 'meet'].includes(this.state);
+    return ['held', 'fall', 'eat', 'happy', 'meet', 'pose'].includes(this.state);
+  }
+
+  // 그 캐릭터가 가진 상황 그림 목록 (기본 제외) — 놀아주기의 '포즈' 버튼에 쓴다
+  get poseKeys() {
+    return POSE_ORDER.filter((k) => this.sprites[k]);
+  }
+
+  // 놀아주기에서 고른 상황 그림을 잠깐 보여 준다 (먹방·춤·응원 …)
+  pose(key, seconds = 6) {
+    if (!this.sprites[key]) return;
+    if (this.state === 'sleep') this.wake();
+    this.grounded = true;
+    this.targetX = null;
+    this.nextSpriteKey = key;
+    this.setState('pose', seconds);
+    // 춤 포즈는 음악이 멈춰도 끝까지 추도록 상태는 pose로 두고 움직임만 춤으로
+    if (key === 'dance') this.bodyEl.className = 'body s-dance';
+    this.say(this.line(POSE_LINE[key] || 'click'), 2400, true);
+    if (key === 'dance') this.burst('♪', 3, 1000);
+    if (key === 'happy' || key === 'greet') this.burst('♥', 3, 1100);
   }
 
   // ---- 상태 전환 ----

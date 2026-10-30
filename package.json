@@ -1,7 +1,7 @@
 {
   "name": "chiikawa-desktop-pet",
   "productName": "먼작귀 펫",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "바탕화면을 돌아다니는 먼작귀 친구들 (개인용)",
   "author": "강현구",
   "main": "src/main.js",

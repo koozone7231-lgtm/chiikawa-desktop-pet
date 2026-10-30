@@ -39,4 +39,5 @@ contextBridge.exposeInMainWorld('petApi', {
   checkUpdate: () => ipcRenderer.send('check-update'),
   installUpdate: () => ipcRenderer.send('install-update'),
   onUpdateState: (fn) => ipcRenderer.on('update-state', (_e, s) => fn(s)),
+  onSettingsChanged: (fn) => ipcRenderer.on('settings-changed', (_e, s) => fn(s)),
 });
